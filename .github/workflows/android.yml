@@ -1,1 +1,84 @@
+name: Gerar APK PES 2013 v1.5 DEV
 
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Compilar APK Android
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Localizar e extrair projeto
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ZIP="PES2013_Android_v1.5_DEV.zip"
+
+          if [ ! -f "$ZIP" ]; then
+            ZIP=$(find . -maxdepth 5 -type f \
+              -iname 'PES2013_Android_v1.5_DEV.zip' \
+              -print -quit)
+          fi
+
+          if [ -z "${ZIP:-}" ] || [ ! -f "$ZIP" ]; then
+            echo "::error::Arquivo PES2013_Android_v1.5_DEV.zip não encontrado."
+            echo "Envie o ZIP para a raiz do repositório."
+            exit 1
+          fi
+
+          mkdir -p /tmp/pes-project
+          unzip -q "$ZIP" -d /tmp/pes-project
+
+          SETTINGS=$(find /tmp/pes-project \
+            -type f -name settings.gradle.kts -print -quit)
+
+          if [ -z "$SETTINGS" ]; then
+            echo "::error::settings.gradle.kts não encontrado dentro do ZIP."
+            exit 1
+          fi
+
+          ROOT=$(dirname "$SETTINGS")
+
+          cp -a "$ROOT"/. "$GITHUB_WORKSPACE"/
+
+          test -f settings.gradle.kts
+          test -f build.gradle.kts
+          test -f app/build.gradle.kts
+          test -f app/src/main/AndroidManifest.xml
+
+          echo "Projeto Android localizado e extraído."
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compilar APK
+        run: gradle --no-daemon assembleDebug
+
+      - name: Verificar APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APK=$(find app/build/outputs/apk/debug \
+            -type f -name '*.apk' -print -quit)
+
+          if [ -z "${APK:-}" ]; then
+            echo "::error::Nenhum APK foi
